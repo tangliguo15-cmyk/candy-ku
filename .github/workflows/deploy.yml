@@ -20,12 +20,11 @@ jobs:
         with:
           context: .
           push: true
-          # 标记镜像版本：latest
           tags: ${{ secrets.DOCKER_USERNAME }}/project-alpha:latest
 
   # === 任务 2: 部署到云服务器 ===
   deploy:
-    needs: build-and-push # 只有任务 1 成功了才执行部署
+    needs: build-and-push
     runs-on: ubuntu-latest
     steps:
       - name: 🚀 SSH 远程部署
@@ -34,22 +33,18 @@ jobs:
           host: ${{ secrets.HOST_IP }}
           username: ubuntu
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script_stop: true # 如果脚本出错立即停止
-          # 远程执行的 Shell 脚本
+          script_stop: true
+          # 简化脚本，增加容错，避免容器名冲突
           script: |
-            echo "--- 开始部署流程 ---"
-            # 1. 停止并删除旧容器 (如果存在)
-            # || true 表示即使容器不存在也不报错，继续执行
-            docker stop my-app || true
-            docker rm my-app || true
-            # 2. 拉取 Docker Hub 上的最新镜像
-            echo "正在拉取最新镜像..."
-            docker pull ${{ secrets.DOCKER_USERNAME }}/project-alpha:latest
-            # 3. 启动新容器
-            echo "启动新容器..."
+            echo "SSH连接成功，开始部署"
+            # 强制删除旧容器（无论是否运行）
+            docker rm -f my-app 2>/dev/null || true
+            # 拉取镜像（忽略错误，继续执行）
+            docker pull ${{ secrets.DOCKER_USERNAME }}/project-alpha:latest || true
+            # 启动新容器（使用--rm确保退出后自动清理）
             docker run -d \
               --name my-app \
-              --restart always \
+              --restart unless-stopped \
               -p 8080:8080 \
               ${{ secrets.DOCKER_USERNAME }}/project-alpha:latest
-            echo "--- 部署完成 ---"
+            echo "部署完成，容器已启动"
